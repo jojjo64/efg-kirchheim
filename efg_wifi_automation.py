@@ -1,11 +1,12 @@
-import re
-from pathlib import Path
+import argparse
 import configparser
 import logging
+import re
 import sys
-import argparse
+from pathlib import Path
 
 from pyunifi.controller import Controller as pyunifi_Controller
+
 
 
 
@@ -44,16 +45,14 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
 
    def _validate_mac_filter_list(self, mac_address_list):
       '''
-         validates a list of MAC addresses and (if needed) returns them
-      
-         :param mac_address_list:
-         :return:
+         validates a list of MAC addresses. If a MAC address has an invalid format, raise a
+         ValueError :exception
       '''
       assert type(mac_address_list) in (tuple, list), 'parameter error: mac_address_list must be tuple or list!'
       
       for i, m in enumerate(mac_address_list):
          # regex from https://stackoverflow.com/questions/7629643/how-do-i-validate-the-format-of-a-mac-address
-         # however removed dash as a separator
+         # however removed dash as a separator -- we only accept colons as a separator...
          if not re.match("[0-9a-f]{2}([:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", m.lower()):
             raise ValueError(f'MAC address at list index {i}: invalid MAC address "{m}"!')
 
@@ -196,7 +195,7 @@ if __name__ == "__main__":
          args.wifi_name,
          args.configfile
       )
-   # in case of an exception: alert
+   # in case of an exception: raise an alert. Here we could as well send a mail or whatever alerting we prefer...
    except Exception as e:
       logger.critical(f'Caught exception {e} in call process_wifi_mac_filter_update!')
    else:
