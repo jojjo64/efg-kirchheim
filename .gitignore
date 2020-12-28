@@ -1,1 +1,4 @@
 /jbrauer.test.ini
+/msal_test/
+**/o365_token.txt
+/docs/efg_automation.pdf
