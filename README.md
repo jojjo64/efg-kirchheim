@@ -56,7 +56,9 @@ The required settings for the MS O365 Automation are:
       app_token = <app_token>
       wifi_automation_bucket_id = <bucket_id>
 
-* the app requires an app registration. The `O365` python package available from pypi is used as a base. Refer to
+* the app requires an app registration. The `O365` python package available from pypi is used as a base. Refer 
+  to https://github.com/O365/python-o365#authentication-steps 
+  and follow the instructions titled "Authenticate on behalf of a user" to register this app.
 * from the app registration you receive the values for `tenant`, `app_id` and `app_token`
 * the `wifi_automation_bucket_id` should refer to the MS Planner bucket where you place your tasks for WiFi automation
 
