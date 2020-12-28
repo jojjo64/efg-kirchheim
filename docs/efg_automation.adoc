@@ -1,0 +1,102 @@
+= The EFG Automation
+J. Brauer (joachim.brauer@efg-kirchheim.de)
+v1.0, 12/2020
+:toc:
+:imagesdir: images
+== Motivation and Process Overview
+
+The WiFi in EFG Kirchheim is set up based on Unifi gear with a CloudKey as the central management component.
+The security setup requires that besides the WPA2 PSK (pre shared key) a MAC address filter should be set up
+and maintained to further lock down WiFi access.
+
+The automation flow to realize the management process for this inventory of MAC addresses is as follows:
+
+* a frontend request process with approval (which is not part of this git project) triggers an MS Flow workflow
+* the MS Flow workflow creates an O365 Planner task (the task must have a defined format) in a Planner board (bucket)
+dedicated to the MAC address filter automation
+
+That's the place where we start:
+
+* all open Planner tasks from the MS Planner bucket are read
+* for each task (*ADDMAC* or *DELMAC*) the MAC address contained in the task
+gets either added or deleted to the Unifi Cloud Key MAC filter list
+* finally the MS Planner task will be set to completed
+
+== Technical Overview
+=== EFG Automation Parts
+The EFG Automation python script suite comprises of these parts:
+
+image::EFGAutomation.overview.png[Overview]
+
+* the `efg_automation.py` main program
+** implements the main CLI for EFG Automation
+** imports all required subcomponents
+
+* the `efg_o365.py` module
+** automates the access to MS Planner Tasks
+** is based on and extends the pip installable `O365` module (refer to https://github.com/O365/python-o365[])
+
+* the `efg_wifi_automation.py` module
+** realizes functions to add or delete a MAC address to the MAC Filter of a Cloud Key WiFi name (WiFi SSID)
+** is based on and extends the pip installable `pyunifi` module
+
+=== O365 Planner Task format
+
+The required MS Planner Task format is as follows:
+
+image::EFGAutomation.MSPlannerTaskFormat.png[MS Planner Task Format]
+
+Additional Notes:
+
+* the red labels are the field names when retrieving the task data via REST API
+* the only allowed MAC address format is as shown here in the example
+* after the EFG Automation has completed a MAC address task it will set the task to completed (= set percentComplete to 100)
+
+== O365 Setup
+
+=== Application Registration in the Azure App Portal
+
+In order to access the MS Planner Task APIs the `efg_o365.py` module has to be set up as an application in the Azure Administration Portal.
+
+Follow the instructions titled "Authenticate on behalf of a user" at https://github.com/O365/python-o365#authentication-steps[]
+and make sure you have applied the following settings:
+
+* add the `offline_access` permission as recommended in the docs
+* as well add the `Tasks.ReadWrite` permission (so the app is allowed to work with MS Planner Tasks)
+* Hint: The `User.Read` permission is required anyway...
+
+At the end of the app registration note down the following values
+
+
+|===
+|Field Title (en)|Field Title (de)|Value
+
+|Application ID
+|Anwendungs-ID (Client)
+|
+
+|Tenant ID
+|Verzeichnis-ID (Mandant)
+|
+
+|Secret Client Key
+|Geheimer Client-Schlüssel
+|
+
+|===
+
+=== First Time Use of this App - generating the access token
+
+When using the app for the first time you will have to follow this authentication procedure:
+
+. the app will print out an access confirmation URL that you have to copy&paste to a web browser (recommended: Firefox)
+and will then sit on a prompt expecting the redirect URI (see below)
+. upon executing this URL via a browser confirm the access for your app
+. the browser will then be redirected to the *redirect URI* you specified upon app registration (usually https://login.microsoftonline.com/common/oauth2/nativeclient[])
+. copy&paste the *full redirect URI* back to the prompt on which the app is waiting
+. after this step the full app access is established and a token file `o365_token.txt` has been created
+in the current working directory
+
+
+
+== Technical Setup
