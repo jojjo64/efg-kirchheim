@@ -151,7 +151,7 @@ class EFGFCloudKeyConfig(object):
    def __init__(self, configfile=None):
       ''' process config file, pull out our vars '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       # check if config file exists, else raise an exception
       f = Path(configfile)
@@ -219,6 +219,9 @@ class EFGMACFile(object):
          write the MAC address file with both mac addresses and comments back to disk
          prepend with a file header
       '''
+      logger = logging.getLogger()
+      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+
       file_header = '''# -----------------------------------------------------------------------------
 # MAC address file
 #  * MAC addresses must have the format hh:hh:hh:hh:hh:hh
@@ -235,6 +238,9 @@ class EFGMACFile(object):
    
    def add_mac (self, mac_address, comment):
       ''' add a MAC to both the simple list and the extended dict and update file '''
+      logger = logging.getLogger()
+      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      
       if mac_address not in self.mac_address_list:
          self.mac_address_list.append(mac_address)
       self.mac_address_list_extended[mac_address] = comment
@@ -242,6 +248,9 @@ class EFGMACFile(object):
    
    def remove_mac (self, mac_address):
       ''' remove a MAC from both the simple list and the extended dict and update file '''
+      logger = logging.getLogger()
+      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      
       if mac_address in self.mac_address_list:
          self.mac_address_list.remove(mac_address)
       if mac_address in self.mac_address_list_extended.keys():
@@ -251,7 +260,7 @@ class EFGMACFile(object):
    def __init__ (self, macfile=None):
       ''' NOTE: no MAC address validation done, only file processing '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       self.macfile = macfile
       self.mac_address_list = []
@@ -278,7 +287,7 @@ class Manage_MACFilter(object):
          :param configfile: our configuration file (holding data how to access the Cloud Key)
       '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       self.macfile = macfile
       self.configfile = configfile

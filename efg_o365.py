@@ -62,7 +62,13 @@ class EFGTaskDetail(ApiComponent):
       for key, value in cloud_data.items():
          # print(f'key {key} value {value}')
          setattr(self, key, value)
-
+         
+   def get_efg__parts_from_task_details(self):
+      '''
+         extract the EFG Details from the description
+      '''
+      self.efg_flow_number = self.description.split('#')[0].strip()
+      self.efg_mac_address = self.description.split('#')[1].strip()
 
 
 
@@ -125,7 +131,14 @@ class EFGTask(ApiComponent):
       data = response.json()
       
       return self.taskdetail_constructor(parent=self, **{'data': data})
-   
+
+   def get_efg_parts_from_task (self):
+      '''
+         extract the EFG Details from the task title
+      '''
+      self.efg_mac_command = self.title.split('-')[0].strip().lower()
+      self.efg_mac_comment = self.title.split('-')[1].strip()
+
    #
    def update_task_percent_complete (self):
       '''
@@ -218,7 +231,7 @@ class EFGPlannerConfig(object):
    def __init__ (self, configfile=None):
       ''' process config file, pull out our vars '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       # check if config file exists, else raise an exception
       f = Path(configfile)
@@ -251,7 +264,7 @@ class ManageEFGWiFiPlannerTasks(object):
          :param configfile:
       '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       self.kwargs = kwargs
       # get our config
@@ -264,6 +277,8 @@ class ManageEFGWiFiPlannerTasks(object):
       # NOTE: if we are NOT authenticated the code flow blocks here until an interactive user has
       # granted app access with the granting URL offered here and has pasted back the grant confirmation URL
       # here
+      # For app registration refer to
+      #    https://github.com/O365/python-o365
       # however once an app has been granted and the stored oauth token exists (o365_token.txt) then the
       # token is valid for 90 days, and if the app is reused within these 90 days to access O365 then
       # token lifetime is extended to another 90 days (according to the MS docs).
@@ -279,7 +294,7 @@ class ManageEFGWiFiPlannerTasks(object):
       else:
          logger.info('Authenticated (reuse token)!')
    
-   def get_all_open_WiFiAutomation_planner_tasks (self):
+   def get_all_open_EFGWiFiAutomation_planner_tasks (self):
       '''
          get all open tasks for WiFi automation (identify them by bucket and percent complete == 0)
          get task details as well and add a reference as "efg_task_details" attribute to the task object
@@ -296,14 +311,21 @@ class ManageEFGWiFiPlannerTasks(object):
          if task.bucketId != self.config.planner_wifi_automation_bucket_id: continue
          # ignore completed tasks
          if task.percentComplete == 100: continue
-         task.efg_task_details = task.get_task_details()
+         # sort out all non MAC automation tasks -- the title starts with either ADDMAC or DELMAC...
+         if not (task.title.lower().startswith('addmac') or task.title.lower().startswith('delmac')): continue
+         # get the task details
+         task._task_details = task.get_task_details()
+         # extract all EFG details from the task title
+         task.get_efg_parts_from_task()
+         # ... and from the task description
+         task._task_details.get_efg__parts_from_task_details()
          self.open_tasks.append(task)
       return self.open_tasks
 
 
 
 
-class EFGWiFiAutomationNotifications(object):
+class MSTeamsAutomationNotifications(object):
    '''
       the class for sending notifications (infos, alerts, ...) for the EFG WiFi Automation
       currently we use a webook to send messages to a MS Teams Channel
@@ -314,7 +336,7 @@ class EFGWiFiAutomationNotifications(object):
          read all required notification parameters
       '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       # check if config file exists, else raise an exception
       f = Path(self.configfile)
@@ -327,20 +349,20 @@ class EFGWiFiAutomationNotifications(object):
       
       # check for existence of keys we need
       # NOTE: all these stmts will throw a KeyError exception if either the section or one of the keys does not exist
-      notification_config = config['EFG_Notifications']
+      notification_config = config['MSTEams_Notifications']
       self.msteams_webhook = notification_config['msteams_webhook']
       self.msteams_adaptive_card_info = notification_config['msteams_adaptive_card_info']
       self.msteams_adaptive_card_warning = notification_config['msteams_adaptive_card_warning']
       self.msteams_adaptive_card_error = notification_config['msteams_adaptive_card_error']
    
-   def __init__ (self, configfile=None):
+   def __init__ (self, configfile):
       '''
          initialize -- mainly: read our config
       
          :param configfile:
       '''
       logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       self.configfile = configfile
       self._read_config()
@@ -379,9 +401,6 @@ class EFGWiFiAutomationNotifications(object):
       
          :param message: the message to send
       '''
-      logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
       self._send_message(type='info', message=message)
    
    def send_warning_message (self, message):
@@ -390,9 +409,6 @@ class EFGWiFiAutomationNotifications(object):
 
          :param message: the message to send
       '''
-      logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
       self._send_message(type='warning', message=message)
    
    def send_error_message (self, message):
@@ -401,9 +417,6 @@ class EFGWiFiAutomationNotifications(object):
 
          :param message: the message to send
       '''
-      logger = logging.getLogger()
-      logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
       self._send_message(type='error', message=message)
 
 
@@ -434,5 +447,6 @@ if __name__ == "__main__":
       )
       print(f'\n\nOpen Planner Tasks for WiFi Automation:')
       print('==============================================')
-      for task in o365manageobj.get_all_open_WiFiAutomation_planner_tasks():
-         print(f'   id "{task.id}" title "{task.title}" description "{task.efg_task_details.description}"')
+      for task in o365manageobj.get_all_open_EFGWiFiAutomation_planner_tasks():
+         print(f'   id "{task.id}" title "{task.title}" description "{task._task_details.description}"')
+         print(f'   command "{task.efg_mac_command}" comment "{task.efg_mac_comment}" flow_id "{task._task_details.efg_flow_number}" MAC "{task._task_details.efg_mac_address}"')
