@@ -117,7 +117,7 @@ def process_wifi_mac_tasks(args):
          a.process_wifi_mac_tasks()
       # in case of an exception: raise an alert. Here we could as well send a mail or whatever alerting we prefer...
       except Exception as e:
-         errmsg = f'Caught exception {e} in EFGAutomation-->process_wifi_mac_tasks!'
+         errmsg = f'Caught exception "{e}" in EFGAutomation-->process_wifi_mac_tasks!'
          logger.critical(errmsg)
          mstnotifications.send_error_message(errmsg)
       else:
@@ -130,7 +130,7 @@ if __name__ == "__main__":
    '''
       the EFG Automation CLI
    '''
-   logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
    logger = logging.getLogger()
    
    # process arguments
