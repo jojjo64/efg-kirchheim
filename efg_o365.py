@@ -381,6 +381,9 @@ class MSTeamsAutomationNotifications(object):
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
+      # escape double quotes to avoid JSON parsing errors
+      # https://stackoverflow.com/questions/19176024/how-to-escape-special-characters-in-building-a-json-string
+      message = message.replace('"', '\\"')
       if type == 'info':
          message = copy.deepcopy(self.msteams_adaptive_card_info).replace('__MESSAGE__', message)
       elif type == 'warning':

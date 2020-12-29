@@ -34,12 +34,21 @@ Information and Alert Messages can be sent to a MS Teams Channel via a webhook (
 The EFG Office365 Automation module is based on and extends the `O365` package available from pypi.
 
 
-## EFG WiFi Automation The `efg_wifi_automation.py` module
+## EFG WiFi Automation: The `efg_wifi_automation.py` module
 
 The EFG WiFi Automation automates MAC address filter updates to a Unifi CloudKey. It has a restricted command set from
 command line and offers more functions when used as a python module.
 
 The EFG WiFi Automation module is based on and extends the `pyunifi` package available from pypi.
+
+
+## EFG Automation: The `efg_automation.py` module
+
+This is the main CLI orchestrating the modules above and thus realizing the automation flow
+
+* starting from reading the open MS Planner tasks
+* then adding or removing MACs from the Unifi CloudKey WiFi MAC Filter
+* then setting the MS Planner task to complete
 
 
 ## Detailed documentation
