@@ -248,7 +248,7 @@ class EFGPlannerConfig(object):
       self.efg_tenant = planner_config['tenant']
       self.app_id = planner_config['app_id']
       self.app_token = planner_config['app_token']
-      self.planner_wifi_automation_bucket_id = planner_config['wifi_automation_bucket_id']
+      self.planner_wifi_automation_plan_id = planner_config['wifi_automation_plan_id']
 
 
 
@@ -289,8 +289,9 @@ class ManageEFGWiFiPlannerTasks(object):
             else:
                logger.critical('Authentication failed!!!')
          else:
-            logger.critical('(Re)Authentication required but "do_initial_auth" not set!!!')
-            # TODO: add alering, e.g. via e-mail or TEAMS Chat...
+            errmsg = '(Re)Authentication required but "do_initial_auth" not set!!!'
+            logger.critical(errmsg)
+            raise PermissionError(errmsg)
       else:
          logger.info('Authenticated (reuse token)!')
    
@@ -307,8 +308,8 @@ class ManageEFGWiFiPlannerTasks(object):
       planner = EFGPlanner(parent=self.account)
       for task in planner.get_my_tasks():
          # logger.debug(f'task: {task.__dict__}')
-         # only handle tasks with EFGAutomation Planner Board bucket id
-         if task.bucketId != self.config.planner_wifi_automation_bucket_id: continue
+         # only handle tasks with the Planner "WiFi-Automation" plan id that is dedicated to the EFG Automation
+         if task.planId != self.config.planner_wifi_automation_plan_id: continue
          # ignore completed tasks
          if task.percentComplete == 100: continue
          # sort out all non MAC automation tasks -- the title starts with either ADDMAC or DELMAC...
@@ -349,7 +350,7 @@ class MSTeamsAutomationNotifications(object):
       
       # check for existence of keys we need
       # NOTE: all these stmts will throw a KeyError exception if either the section or one of the keys does not exist
-      notification_config = config['MSTEams_Notifications']
+      notification_config = config['MSTeams_Notifications']
       self.msteams_webhook = notification_config['msteams_webhook']
       self.msteams_adaptive_card_info = notification_config['msteams_adaptive_card_info']
       self.msteams_adaptive_card_warning = notification_config['msteams_adaptive_card_warning']
@@ -436,14 +437,25 @@ if __name__ == "__main__":
                        help="the command to execute",
                        )
    parser.add_argument("--configfile",
-                       help="our configfile",
+                       help="our configfile (default is efg_automation.ini)",
                        default='efg_automation.ini'
+                       )
+   parser.add_argument("--do_initial_auth",
+                       help="must be specified if the initial authentication against O365 should be performed",
+                       default=False,
+                       action='store_true',
                        )
    args = parser.parse_args(sys.argv[1:])
    
+   # add optional arguments to kwargs
+   kwargs = {}
+   if args.do_initial_auth:
+      kwargs['do_initial_auth'] = True
+      
    if args.command == 'show_open_tasks':
       o365manageobj = ManageEFGWiFiPlannerTasks(
          args.configfile,
+         **kwargs
       )
       print(f'\n\nOpen Planner Tasks for WiFi Automation:')
       print('==============================================')

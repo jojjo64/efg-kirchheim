@@ -135,19 +135,19 @@ if __name__ == "__main__":
    
    # process arguments
    parser = argparse.ArgumentParser(description='the EFG Automation CLI')
-   # the config file is always required
-   parser.add_argument("--configfile",
-                       help="our configfile",
-                       default='efg_automation.ini'
-   )
 
    # introduce a subparser in case we get more commands in the future (never say never :-)
    subparsers = parser.add_subparsers(dest='command')
    
    # the WiFi automation commands
    wifimacparser = subparsers.add_parser('process_wifi_mac_tasks', help='process all open WiFi MAC filter list tasks')
+   # the config file
+   wifimacparser.add_argument("--configfile",
+                              help="our configfile (default is efg_automation.ini)",
+                              default='efg_automation.ini'
+   )
    wifimacparser.add_argument("--wifi_name",
-                              help="the WiFi name (SSID) to work on",
+                              help="the WiFi name (SSID) to work on (optional -- if not given, the config default is used)",
                               default=None
    )
    args = parser.parse_args(sys.argv[1:])
