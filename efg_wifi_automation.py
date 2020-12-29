@@ -166,9 +166,12 @@ class EFGFCloudKeyConfig(object):
       # NOTE: all these stmts will throw a KeyError exception if either the section or one of the keys does not exist
       cloudkey_config = config['CloudKey']
       self.cloudkey_host = cloudkey_config['host']
-      self.cloudkey_default_wifi_name = cloudkey_config['default_wifi_name']
       self.cloudkey_user = cloudkey_config['user']
       self.cloudkey_password = cloudkey_config['password']
+      self.cloudkey_default_wifi_name = cloudkey_config['default_wifi_name']
+      self.cloudkey_update_mac_file_on_add_remove = cloudkey_config.getboolean('update_mac_file_on_add_remove')
+
+
 
 
 
@@ -331,9 +334,10 @@ class Manage_MACFilter(object):
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
-      # add the new MAC to both the CloudKey and the backup MAC address file
+      # add the new MAC to both the CloudKey and (if configured) the backup MAC address file
       self.cloudkey_connect.add_mac_to_mac_filter(self.wifi_id, mac_address)
-      self.mac_object.add_mac(mac_address, comment)
+      if self.config.cloudkey_update_mac_file_on_add_remove:
+         self.mac_object.add_mac(mac_address, comment)
    
    #
    def remove_mac_from_mac_filter (self, mac_address):
@@ -346,9 +350,10 @@ class Manage_MACFilter(object):
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
-      # add the new MAC to both the CloudKey and the backup MAC address file
+      # remove the MAC to both the CloudKey and (if configured) the backup MAC address file
       self.cloudkey_connect.remove_mac_from_mac_filter(self.wifi_id, mac_address)
-      self.mac_object.remove_mac(mac_address)
+      if self.config.cloudkey_update_mac_file_on_add_remove:
+         self.mac_object.remove_mac(mac_address)
    
    #
    def set_wifi_mac_filter_from_file (self):
@@ -388,7 +393,7 @@ if __name__ == "__main__":
                        help="the name of the file with mac addresses (not required for the 'show_macs' command)",
                        )
    parser.add_argument("--configfile",
-                       help="our configfile",
+                       help="our configfile (default is efg_automation.ini)",
                        default='efg_automation.ini'
                        )
    args = parser.parse_args(sys.argv[1:])

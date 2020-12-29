@@ -1,8 +1,14 @@
 = The EFG Automation
-J. Brauer (joachim.brauer@efg-kirchheim.de)
-v1.0, 12/2020
+:doctype: book
+:author: Joachim Brauer
+:email: joachim.brauer@efg-kirchheim.de
+:revnumber: 1.0
+:revdate: 2020-12-28
+:revremark: Initial Release
+:sectnums:
 :toc:
 :imagesdir: images
+
 == Motivation and Process Overview
 
 The WiFi in EFG Kirchheim is set up based on Unifi gear with a CloudKey as the central management component.
@@ -12,12 +18,12 @@ and maintained to further lock down WiFi access.
 The automation flow to realize the management process for this inventory of MAC addresses is as follows:
 
 * a frontend request process with approval (which is not part of this git project) triggers an MS Flow workflow
-* the MS Flow workflow creates an O365 Planner task (the task must have a defined format) in a Planner board (bucket)
+* the MS Flow workflow creates an O365 Planner task (the task must have a defined format) in a Planner plan
 dedicated to the MAC address filter automation
 
 That's the place where we start:
 
-* all open Planner tasks from the MS Planner bucket are read
+* all open Planner tasks from the MS Planner plan are read
 * for each task (*ADDMAC* or *DELMAC*) the MAC address contained in the task
 gets either added or deleted to the Unifi Cloud Key MAC filter list
 * finally the MS Planner task will be set to completed
@@ -65,6 +71,11 @@ and make sure you have applied the following settings:
 * as well add the `Tasks.ReadWrite` permission (so the app is allowed to work with MS Planner Tasks)
 * Hint: The `User.Read` permission is required anyway...
 
+:icons: font
+NOTE: Without the `offline_access` permission the access token would only be valid for 1 hour however
+with this permission the maximum access token lifetime is 90 days, and any access using the token
+within these 90 days renews the token for another 90 days.
+
 At the end of the app registration note down the following values
 
 
@@ -85,18 +96,289 @@ At the end of the app registration note down the following values
 
 |===
 
+
+=== How to obtain the plan id for WiFi MAC Automation Tasks
+As shown in <<_the_configuration_file_efg_automation_ini>> we will need the *planId* parameter to allow `efg_o365.py` to
+filter out WiFi MAC tasks. To obtain that id follow these steps:
+
+. create a dedicated MS Planner Plan for all WiFi Automation Tasks (in our case the name is `WiFi-Automation`)
+. create a task in that Plan
+. change to the `List` view
+. to the right of the task do a RMB (right mouse button) click on the `...` Menu
+. in the context menu showing up now click on `copy link for task`
+. copy the link that shows up now in an editor of your choice
+. see the picture below where the plan id is located in the link and copy that over into
+the configuration file
+
+image::EFGAutomation.FindPlanID.png[How to find the plan id]
+
+
 === First Time Use of this App - generating the access token
 
-When using the app for the first time you will have to follow this authentication procedure:
+When using the app for the first time (after you have installed the application as shown in <<_installing_the_efg_automation_suite>>) you will have to follow this authentication procedure:
+
+. run the `efg_o365.py` module from the command line with the `` parameter, e.g.
+
+   python efg_o365.py --config <yourconfig.ini> --do_initial_auth show_open_tasks
 
 . the app will print out an access confirmation URL that you have to copy&paste to a web browser (recommended: Firefox)
 and will then sit on a prompt expecting the redirect URI (see below)
 . upon executing this URL via a browser confirm the access for your app
-. the browser will then be redirected to the *redirect URI* you specified upon app registration (usually https://login.microsoftonline.com/common/oauth2/nativeclient[])
-. copy&paste the *full redirect URI* back to the prompt on which the app is waiting
-. after this step the full app access is established and a token file `o365_token.txt` has been created
-in the current working directory
+. the browser will then be redirected to the *redirect URI* you specified upon app registration (usually https://login.microsoftonline.com/common/oauth2/nativeclient/<something>[])
+. this URL does not lead to a valid existing site so the request will *fail* -- however:
+. copy&paste the *full redirect URI* starting with `https://login.microsoftonline.com/common/oauth2/nativeclient...` back to the prompt on which the app is waiting
+. after this step the full app access is established and a token file `o365_token.txt` with the access token has
+been created in the current working directory
+
+:icons: font
+CAUTION: The file `o365_token.txt` is equivalent to a password, thus protect this file from unwanted access.
+
+== Installing the EFG Automation Suite
+=== Installing the python programs from the github repository
+
+:icons: font
+[NOTE]
+====
+The prerequisites for the following steps are:
+
+* git must be installed (`yum install git` for Fedora/CentOS derivates or `apt-get install git` for debian derivates)
+* python3 >= 3.6 must be installed
+====
+
+Follow these steps:
+
+[source,bash]
+----
+# cd to the directory where you want to get the EFG automation installed
+
+# create a python3 virtual environment in a directory called venv
+python3 -m venv venv
+
+# activate the new virtual environment
+source venv/bin/activate
+
+# clone the git repo from github
+git clone https://github.com/jojjo64/efg-kirchheim.git
+
+# cd to the now cloned directory
+cd efg-kirchheim
+
+# install all python module dependencies listed in requirements.txt
+pip install -r requirements.txt
+----
 
 
+=== The configuration file `efg_automation.ini`
+The `efg_automation.ini` has these sections:
 
-== Technical Setup
+|===
+|Section|Meaning
+
+|CloudKey
+|Required settings to access the Unifi CloudKey
+
+|O365_Planner
+|Required settings to access the MS Planner Tasks
+
+|MSTeams_Notifications
+|Required settings for posting status and alert messages into a MS Teams Channel
+
+|EFGAutomation
+|General settings for the entire suite
+|===
+
+==== CloudKey Section
+The CloudKey section contains these settings:
+
+    [CloudKey]
+    host = <ip>
+    user = <user>
+    password = <password>
+    default_wifi_name = <yourdefaultSSID>
+    update_mac_file_on_add_remove = yes
+
+* set the `host` var to the cloud key IP
+* set user and password of a CloudKey user with administrative rights into the `user` and `password` vars
+* you can set the default WLAN name (SSID) here in the config, then you do not have to specify that on the command line
+
+==== O365_Planner Section
+The O365_Planner section contains these settings:
+
+    [O365_Planner]
+    tenant = <yourtenant>
+    app_id = <app_id>
+    app_token = <app_token>
+    wifi_automation_plan_id = <plan_id>
+
+* refer to the <<_application_registration_in_the_azure_app_portal>> and
+<<_how_to_obtain_the_plan_id_for_wifi_mac_automation_tasks>> chapters how to obtain these values.
+
+==== MSTeams_Notifications Section
+The MSTeams_Notifications section contains these settings:
+
+    [MSTeams_Notifications]
+    msteams_webhook = <webhook_link>
+    msteams_adaptive_card_info = (...)
+    msteams_adaptive_card_warning = (...)
+    msteams_adaptive_card_error = (...)
+
+* the only value you have to set here:
+** dedicate an MS Teams Chat Channel for Status and Error Messages of the
+EFG Automation
+** Go to `Connectors` and add an `Incoming Webhook` to this Channel
+** copy the webhook link from this `Incoming Webhook` and add it to the `msteams_webhook` field in this config section
+
+==== EFGAutomation Section
+The EFGAutomation section contains these settings:
+
+    [EFGAutomation]
+    send_msteams_status_messages = yes
+    send_msteams_error_messages = yes
+
+|===
+|Value|Meaning
+
+|`send_msteams_status_messages`
+|Set to `yes` if you want to receive status messages into the MS Teams Channel, otherwise set to `no`
+
+|`send_msteams_error_messages`
+|Currently sending error message cannot be turned off, thus keep this set to `yes`.
+
+|===
+
+== Running the efg_automation suite
+
+While the `efg_automation.py` orchestrates the entire suite, each component has
+a CLI on its own and offers a CLI with limited capabilities which are mainly intended
+for testing the components.
+
+=== The `efg_o365.py` module
+
+Usage from command line:
+
+----
+usage: efg_o365.py [-h] [--configfile CONFIGFILE] [--do_initial_auth]
+                   {show_open_tasks}
+EFG O365 Planner Task automation: manage Planner Tasks
+
+positional arguments:
+  {show_open_tasks}     the command to execute
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --configfile CONFIGFILE
+                        our configfile
+  --do_initial_auth     must be specified if the initial authentication
+                        against O365 should be performed
+----
+
+:icons: font
+NOTE: use the `show_open_tasks` command to test connectivity to O365
+
+
+=== The `efg_wifi_automation.py` module
+Usage from command line:
+
+----
+usage: efg_wifi_automation.py [-h] [--wifi_name WIFI_NAME] [--macfile MACFILE]
+                              [--configfile CONFIGFILE]
+                              {show_macs,set_mac_filter}
+
+EFG WiFi automation: manage Unifi Cloud Key mac address filter
+
+positional arguments:
+  {show_macs,set_mac_filter}
+                        the command to execute
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --wifi_name WIFI_NAME
+                        the Cloud Key WiFi name (SSID) to work on (optional --
+                        if not given, the config default is used)
+  --macfile MACFILE     the name of the file with mac addresses (not required
+                        for the 'show_macs' command)
+  --configfile CONFIGFILE
+                        our configfile
+----
+
+[NOTE]
+====
+* the `show_macs` command shows the MAC addresses set in the WiFi filter of the SSID in question
+* thus use the `show_macs` command for CloudKey connectivity testing
+* the `set_mac_filter` command sets (= completely overwrites) the MAC address filter of the SSID in question
+from the file specified in the `--macfile` parameter (for the file layout refer to <<_initial_mac_filter_setup_via_a_mac_address_file>>)
+====
+
+==== Initial MAC Filter Setup via a MAC address file
+
+The rules for setting up a MAC address file are:
+
+* each MAC address has to be on a separate line in the file
+* the only allowed delimiter between two hex values is a colon `:`
+* line comments are allowed: they must start with a hash `#` in column 1 of a line
+* inline comments following a MAC address are allowed as well:
+** they must be separated from the MAC address by one or more blanks
+** they must start with a hash `#`
+* blank lines are allowed as well and will be ignored
+
+An example MAC address file showing these conventions looks like this:
+
+    # John Doe
+    aa:bb:cc:dd:ee:ff
+    11:22:33:44:55:66      # Jane Doe
+
+
+==== MAC address file update when processing ADDMAC and DELMAC tasks
+
+ADDMAC and DELMAC are acronyms for these `Manage_MACFilter` class methods of the
+`efg_wifi_automation.py` module:
+
+|===
+|Acronym|Method|Meaning
+
+|ADDMAC
+|add_mac_to_mac_filter()
+|adds a MAC to a WiFi name (SSID) MAC address filter
+
+|DELMAC
+|remove_mac_from_mac_filter()
+|removes a MAC from a WiFi name (SSID) MAC address filter
+
+|===
+
+If you set the `update_mac_file_on_add_remove` config setting to `yes` then each ADDMAC / DELMAC activity will update
+a shadow MAC address file specified by the `--macfile` parameter as well.
+
+The intention of maintaining a shadow MAC file is: Should a CloudKey configuration
+be lost for whatever reason (accidential deletion, CloudKey Hardware Failure) then you can
+easily restore the MAC address filter from this shadow MAC file using `efg_wifi_automation.py` 's `set_mac_filter` command.
+
+However creating backups from the entire CloudKey config is a more holistic approach to prevent
+configuration data loss in such cases -> thus I recommend taking this solution instead.
+
+
+=== The `efg_automation.py` module
+
+As already said this module is the main CLI module for the entire EFG automation.
+
+Recommended usage: Run from crontab in the desired frequence.
+
+General usage from command line:
+
+----
+usage: efg_automation.py process_wifi_mac_tasks [-h] [--configfile CONFIGFILE]
+                                                [--wifi_name WIFI_NAME]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --configfile CONFIGFILE
+                        our configfile (default is efg_automation.ini)
+  --wifi_name WIFI_NAME
+                        the WiFi name (SSID) to work on (optional -- if not
+                        given, the config default is used)
+----
+
+Invoking this program will
+
+* read all open *ADDMAC* / *DELMAC* Planner Tasks to add or remove MAC addresses
+* then add or remove the MAC in question to or from the CloudKey WiFi name (SSID) MAC filter
