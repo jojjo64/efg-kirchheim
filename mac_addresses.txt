@@ -2,19 +2,11 @@
 # MAC address file
 #  * MAC addresses must have the format hh:hh:hh:hh:hh:hh
 #  * MAC addresses must start in col 1, one MAC per line
+#  * then - separated with a semicolon - the WiFi name (SSID) has to follow
 #  * line comments are allowed (starting with a # in col 1)
 #  * inline comments (after the MAC, separated with a #) are allowed as well
 #  * all comments will be removed during processing
 # -----------------------------------------------------------------------------
-aa:bb:cc:dd:ee:ff   # Karl Müller
-11:22:33:44:55:66   # Isolde Müller
-22:33:44:55:66:77   # Lieschen Müller
-11:33:22:44:65:56   # dreggl drabb
-13:31:22:44:66:55   # treglebb
-31:34:56:78:AB:CD   # Eddie Eppler
-31:34:56:78:AB:CF   # Eddie Eppler
-22:34:56:78:AB:CF   # Edmund Eppler
-32:34:56:78:AB:CF   # Eddy Epp
-21:34:56:78:AB:CF   # Ede Eppler
-22:34:56:78:AB:CD   # Edmund Epple
-12:34:56:78:AB:CD   # Edmund Epp
+aa:bb:cc:dd:ee:ff;myWiFiSSID   # Karl Müller
+11:22:33:44:55:66;myWiFiSSID   # Isolde Müller
+22:33:44:55:66:77;myWiFiSSID   # Lieschen Müller

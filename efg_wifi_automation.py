@@ -29,7 +29,7 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       return self._api_read(f'rest/wlanconf/{wifi_id}')
    
    #
-   def get_current_mac_filter_list (self, wifi_id):
+   def get_current_mac_filter_list (self, wifi_name):
       '''
          get the current MAC address filter list for a particular WiFi (WLAN)
          for whathever reason the REST API endpoint that gets called via _get_wifi_settings() returns a list
@@ -38,6 +38,7 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
          :param wifi_id: the id of the WLAN to get the MAC address list for
          :return: the MAC address list for the WLAN given by id
       '''
+      wifi_id = self.get_wifi_id_by_name(wifi_name)
       return self._get_wifi_settings(wifi_id)[0]['mac_filter_list']
    
    #
@@ -60,15 +61,18 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       raise ValueError(f'No WiFi with name (SSID) "{name}" found!')
 
    #
-   def update_wifi_activate_deactivate_mac_filter (self, wifi_id, enabled=True):
+   def update_wifi_activate_deactivate_mac_filter (self, wifi_name, enabled=True):
       """ either activate or deactivate MAC filtering """
       assert enabled in (True, False), 'parameter error: enabled must be either True or False!'
+      # get the wifi id for the wifi name
+      wifi_id = self.get_wifi_id_by_name(wifi_name)
       self._update_wifi_settings(wifi_id, params={'mac_filter_enabled': enabled})
 
    #
-   def update_wifi_set_mac_filter_policy (self, wifi_id, policy='allow'):
+   def update_wifi_set_mac_filter_policy (self, wifi_name, policy='allow'):
       """ set MAC filtering to either allow (whitelist) or deny (blacklist) mode """
       assert policy in ('allow', 'deny'), 'parameter error: policy can only be "allow" or "deny"!'
+      wifi_id = self.get_wifi_id_by_name(wifi_name)
       self._update_wifi_settings(wifi_id, params={'mac_filter_policy': policy})
 
    def _validate_mac_filter_list(self, mac_address_list):
@@ -85,18 +89,20 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
             raise ValueError(f'MAC address at list index {i}: invalid MAC address "{m}"!')
    
    #
-   def set_wifi_mac_filter_list (self, wifi_id, mac_address_list):
+   def set_wifi_mac_filter_list (self, wifi_name, mac_address_list):
       '''
          set (overwrite) the wifi MAC address filter
       
          :param wifi_id: the id of the WLAN to add the MAC address to the current filter
          :param mac_address_list: the list of MACs to set the filter to
       '''
+      # get the wifi id for the wifi name
+      wifi_id = self.get_wifi_id_by_name(wifi_name)
       self._validate_mac_filter_list(mac_address_list)
       self._update_wifi_settings(wifi_id, params={'mac_filter_list': mac_address_list})
    
    #
-   def add_mac_to_mac_filter (self, wifi_id, mac_address):
+   def add_mac_to_mac_filter (self, wifi_name, mac_address):
       '''
          add a MAC address to the current MAC filter list
          
@@ -105,20 +111,20 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       # get the current list of MACs in the MAC address filter
       # if the MAC to add is not contained, add it and update the entire list
-      mac_address_list = self.get_current_mac_filter_list(wifi_id)
+      mac_address_list = self.get_current_mac_filter_list(wifi_name)
       if mac_address not in mac_address_list:
          mac_address_list.append(mac_address)
          logger.info(f'MAC address {mac_address} was not in MAC list -- added...')
-         self.set_wifi_mac_filter_list(wifi_id, mac_address_list)
+         self.set_wifi_mac_filter_list(wifi_name, mac_address_list)
       else:
          logger.warning(f'MAC address {mac_address} already contained in MAC list -- no action taken...')
          # ToDo: add exception
    
    #
-   def remove_mac_from_mac_filter (self, wifi_id, mac_address):
+   def remove_mac_from_mac_filter (self, wifi_name, mac_address):
       '''
          remove a MAC address from the current MAC filter list
 
@@ -130,11 +136,11 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       
       # get the current list of MACs in the MAC address filter
       # if the MAC to remove is contained, remove it and update the entire list
-      mac_address_list = self.get_current_mac_filter_list(wifi_id)
+      mac_address_list = self.get_current_mac_filter_list(wifi_name)
       if mac_address in mac_address_list:
          mac_address_list.remove(mac_address)
          logger.info(f'MAC address {mac_address} was in MAC list -- removed...')
-         self.set_wifi_mac_filter_list(wifi_id, mac_address_list)
+         self.set_wifi_mac_filter_list(wifi_name, mac_address_list)
       else:
          logger.warning(f'MAC address {mac_address} NOT found in MAC list -- no action taken...')
          # ToDo: add exception
@@ -168,7 +174,6 @@ class EFGFCloudKeyConfig(object):
       self.cloudkey_host = cloudkey_config['host']
       self.cloudkey_user = cloudkey_config['user']
       self.cloudkey_password = cloudkey_config['password']
-      self.cloudkey_default_wifi_name = cloudkey_config['default_wifi_name']
       self.cloudkey_update_mac_file_on_add_remove = cloudkey_config.getboolean('update_mac_file_on_add_remove')
 
 
@@ -192,6 +197,17 @@ class EFGMACFile(object):
          the restore function offered here)
        * to restore the list, simply take the file and load it via CLI using the "set_mac_filter" command
    '''
+
+   def __init__ (self, macfile=None):
+      ''' NOTE: no MAC address validation done, only file processing '''
+      logger = logging.getLogger()
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
+   
+      self.macfile = macfile
+      self.mac_address_list = {}
+      self.mac_address_list_extended = {}
+      self._process_macfile()
+
    def _process_macfile(self):
       ''' open file, ignore / remove comments and return a list of MACs '''
       # check if macfile exists, else raise an exception
@@ -212,10 +228,16 @@ class EFGMACFile(object):
             # if we have an inline comment, e.g.
             #    aa:bb:cc:dd:ee:ff      # John Doe
             # split it away and remove blanks
-            mac_address = l.split('#')[0].strip()
+            mac_address_wifi_name = l.split('#')[0].strip()
+            mac_address = mac_address_wifi_name.split(';')[0].strip()
+            wifi_name = mac_address_wifi_name.split(';')[1].strip()
             comment = l.split('#')[1].strip()
-            self.mac_address_list.append(mac_address)
-            self.mac_address_list_extended[mac_address] = comment
+            if wifi_name not in self.mac_address_list.keys():
+               self.mac_address_list[wifi_name] = []
+            self.mac_address_list[wifi_name].append(mac_address)
+            if wifi_name not in self.mac_address_list_extended:
+               self.mac_address_list_extended[wifi_name] = {}
+            self.mac_address_list_extended[wifi_name][mac_address] = comment
    
    def write_macfile (self):
       '''
@@ -229,6 +251,7 @@ class EFGMACFile(object):
 # MAC address file
 #  * MAC addresses must have the format hh:hh:hh:hh:hh:hh
 #  * MAC addresses must start in col 1, one MAC per line
+#  * then - separated with a semicolon - the WiFi name (SSID) has to follow
 #  * line comments are allowed (starting with a # in col 1)
 #  * inline comments (after the MAC, separated with a #) are allowed as well
 #  * all comments will be removed during processing
@@ -236,39 +259,40 @@ class EFGMACFile(object):
 '''
       with open(self.macfile, 'w') as f:
          f.write(file_header)
-         for mac_address, comment in self.mac_address_list_extended.items():
-            f.write(f'{mac_address}   # {comment}\n')
+         for wifi_name in self.mac_address_list_extended.keys():
+            for mac_address, comment in self.mac_address_list_extended[wifi_name].items():
+               f.write(f'{mac_address};{wifi_name}   # {comment}\n')
+
+   def get_mac_list_for_wifi_name(self, wifi_name):
+      ''' return the mac address list for the WiFi name (SSID) '''
+      return self.mac_address_list[wifi_name]
    
-   def add_mac (self, mac_address, comment):
+   def add_mac (self, mac_address, wifi_name, comment):
       ''' add a MAC to both the simple list and the extended dict and update file '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
-      if mac_address not in self.mac_address_list:
-         self.mac_address_list.append(mac_address)
-      self.mac_address_list_extended[mac_address] = comment
+      if wifi_name not in self.mac_address_list.keys():
+         self.mac_address_list[wifi_name] = []
+      if mac_address not in self.mac_address_list[wifi_name]:
+         self.mac_address_list[wifi_name].append(mac_address)
+      if wifi_name not in self.mac_address_list_extended.keys():
+         self.mac_address_list_extended[wifi_name] = {}
+      self.mac_address_list_extended[wifi_name][mac_address] = comment
       self.write_macfile()
    
-   def remove_mac (self, mac_address):
+   def remove_mac (self, mac_address, wifi_name):
       ''' remove a MAC from both the simple list and the extended dict and update file '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
-      if mac_address in self.mac_address_list:
-         self.mac_address_list.remove(mac_address)
-      if mac_address in self.mac_address_list_extended.keys():
-         del self.mac_address_list_extended[mac_address]
+      if wifi_name in self.mac_address_list.keys():
+         if mac_address not in self.mac_address_list[wifi_name]:
+            self.mac_address_list[wifi_name].remove(mac_address)
+      if wifi_name in self.mac_address_list_extended.keys():
+         if mac_address in self.mac_address_list_extended[wifi_name].keys():
+            del self.mac_address_list_extended[wifi_name][mac_address]
       self.write_macfile()
-   
-   def __init__ (self, macfile=None):
-      ''' NOTE: no MAC address validation done, only file processing '''
-      logger = logging.getLogger()
-      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
-      
-      self.macfile = macfile
-      self.mac_address_list = []
-      self.mac_address_list_extended = {}
-      self._process_macfile()
 
 
 
@@ -279,7 +303,7 @@ class Manage_MACFilter(object):
       it manages (orchestrates) the methods of the classes above
    '''
    
-   def __init__ (self, macfile, configfile, wifi_name):
+   def __init__ (self, macfile, configfile, wifi_name = None):
       '''
          store all parameters
          initialize the config and MAC address objects
@@ -298,11 +322,6 @@ class Manage_MACFilter(object):
       
       # read in our config
       self.config = EFGFCloudKeyConfig(configfile=configfile)
-      # if no WiFi name was given as arg, take the default from our config
-      if self.wifi_name is None:
-         self.wifi_name = self.config.cloudkey_default_wifi_name
-         logger.debug(
-            f'no wifi name given on command line -- falling back to config default "{self.config.cloudkey_default_wifi_name}"...')
       # read in the MAC address file
       if self.macfile is not None:
          self.mac_object = EFGMACFile(macfile=macfile)
@@ -313,21 +332,20 @@ class Manage_MACFilter(object):
          self.config.cloudkey_password,
          ssl_verify=False
       )
-      # get the id of the WiFi name/SSID we apply the changes to
-      self.wifi_id = self.cloudkey_connect.get_wifi_id_by_name(self.wifi_name)
-   
+
    def get_macs (self):
       '''
          :return: the list of current MAC addresses
       '''
-      return self.cloudkey_connect.get_current_mac_filter_list(self.wifi_id)
+      return self.cloudkey_connect.get_current_mac_filter_list(self.wifi_name)
    
    #
-   def add_mac_to_mac_filter (self, mac_address, comment):
+   def add_mac_to_mac_filter (self, wifi_name, mac_address, comment):
       '''
          add a MAC to a MAC filter
          add the MAC as well to the contents of the MAC address backup file
       
+         :param wifi_name: the WiFi name (SSID) to work on
          :param mac_address: the MAC address to add
          :param comment: a comment for the MAC (usually the owner name)
       '''
@@ -335,25 +353,26 @@ class Manage_MACFilter(object):
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
       # add the new MAC to both the CloudKey and (if configured) the backup MAC address file
-      self.cloudkey_connect.add_mac_to_mac_filter(self.wifi_id, mac_address)
+      self.cloudkey_connect.add_mac_to_mac_filter(wifi_name, mac_address)
       if self.config.cloudkey_update_mac_file_on_add_remove:
-         self.mac_object.add_mac(mac_address, comment)
+         self.mac_object.add_mac(mac_address, wifi_name, comment)
    
    #
-   def remove_mac_from_mac_filter (self, mac_address):
+   def remove_mac_from_mac_filter (self, wifi_name, mac_address):
       '''
          remove a MAC from a MAC filter
          remove the MAC as well from the contents of the MAC address backup file
 
+         :param wifi_name: the WiFi name (SSID) to work on
          :param mac_address: the MAC address to add
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
       # remove the MAC to both the CloudKey and (if configured) the backup MAC address file
-      self.cloudkey_connect.remove_mac_from_mac_filter(self.wifi_id, mac_address)
+      self.cloudkey_connect.remove_mac_from_mac_filter(wifi_name, mac_address)
       if self.config.cloudkey_update_mac_file_on_add_remove:
-         self.mac_object.remove_mac(mac_address)
+         self.mac_object.remove_mac(mac_address, wifi_name)
    
    #
    def set_wifi_mac_filter_from_file (self):
@@ -365,7 +384,7 @@ class Manage_MACFilter(object):
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
       # ...and finally apply the new MAC address list
-      self.cloudkey_connect.set_wifi_mac_filter_list(self.wifi_id, self.mac_object.mac_address_list)
+      self.cloudkey_connect.set_wifi_mac_filter_list(self.wifi_name, self.mac_object.get_mac_list_for_wifi_name(self.wifi_name))
       logger.info(
          f'Successfully updated MAC filter for WiFi {self.wifi_name}: Applied {len(self.mac_object.mac_address_list)} MAC addresses.')
 
@@ -376,8 +395,6 @@ if __name__ == "__main__":
    '''
       the EFG Wifi Automation CLI
    '''
-   logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
-   logger = logging.getLogger()
    
    # process arguments
    parser = argparse.ArgumentParser(description='EFG WiFi automation: manage Unifi Cloud Key mac address filter')
@@ -386,8 +403,8 @@ if __name__ == "__main__":
                        help="the command to execute",
                        )
    parser.add_argument("--wifi_name",
-                       help="the Cloud Key WiFi name (SSID) to work on (optional -- if not given, the config default is used)",
-                       default=None,
+                       help="the Cloud Key WiFi name (SSID) to work on",
+                       required=True,
                        )
    parser.add_argument("--macfile",
                        help="the name of the file with mac addresses (not required for the 'show_macs' command)",
@@ -396,8 +413,27 @@ if __name__ == "__main__":
                        help="our configfile (default is efg_automation.ini)",
                        default='efg_automation.ini'
                        )
+   parser.add_argument("--debug",
+                       help="print debug output",
+                       default=False,
+                       action='store_true',
+                       )
+   parser.add_argument("--info",
+                       help="print info output",
+                       default=False,
+                       action='store_true',
+                       )
    args = parser.parse_args(sys.argv[1:])
    
+   # depending on parameters set either debug or info output
+   if args.debug:
+      logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   elif args.info:
+      logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   logger = logging.getLogger()
+
    if args.command == 'show_macs':
       macmanageobj = Manage_MACFilter(
          None,

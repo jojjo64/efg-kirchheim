@@ -194,12 +194,10 @@ The CloudKey section contains these settings:
     host = <ip>
     user = <user>
     password = <password>
-    default_wifi_name = <yourdefaultSSID>
     update_mac_file_on_add_remove = yes
 
 * set the `host` var to the cloud key IP
 * set user and password of a CloudKey user with administrative rights into the `user` and `password` vars
-* you can set the default WLAN name (SSID) here in the config, then you do not have to specify that on the command line
 
 ==== O365_Planner Section
 The O365_Planner section contains these settings:
@@ -246,6 +244,8 @@ The EFGAutomation section contains these settings:
 
 |===
 
+=== Running the
+
 == Running the efg_automation suite
 
 While the `efg_automation.py` orchestrates the entire suite, each component has
@@ -257,31 +257,8 @@ for testing the components.
 Usage from command line:
 
 ----
-usage: efg_o365.py [-h] [--configfile CONFIGFILE] [--do_initial_auth]
-                   {show_open_tasks}
-EFG O365 Planner Task automation: manage Planner Tasks
-
-positional arguments:
-  {show_open_tasks}     the command to execute
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --configfile CONFIGFILE
-                        our configfile
-  --do_initial_auth     must be specified if the initial authentication
-                        against O365 should be performed
-----
-
-:icons: font
-NOTE: use the `show_open_tasks` command to test connectivity to O365
-
-
-=== The `efg_wifi_automation.py` module
-Usage from command line:
-
-----
-usage: efg_wifi_automation.py [-h] [--wifi_name WIFI_NAME] [--macfile MACFILE]
-                              [--configfile CONFIGFILE]
+usage: efg_wifi_automation.py [-h] --wifi_name WIFI_NAME [--macfile MACFILE]
+                              [--configfile CONFIGFILE] [--debug] [--info]
                               {show_macs,set_mac_filter}
 
 EFG WiFi automation: manage Unifi Cloud Key mac address filter
@@ -293,20 +270,52 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --wifi_name WIFI_NAME
-                        the Cloud Key WiFi name (SSID) to work on (optional --
-                        if not given, the config default is used)
+                        the Cloud Key WiFi name (SSID) to work on
   --macfile MACFILE     the name of the file with mac addresses (not required
                         for the 'show_macs' command)
   --configfile CONFIGFILE
-                        our configfile
+                        our configfile (default is efg_automation.ini)
+  --debug               print debug output
+  --info                print info output
+----
+
+:icons: font
+NOTE: use the `show_open_tasks` command to test connectivity to O365
+
+
+=== The `efg_wifi_automation.py` module
+Usage from command line:
+
+----
+usage: efg_wifi_automation.py [-h] --wifi_name WIFI_NAME [--macfile MACFILE]
+                              [--configfile CONFIGFILE] [--debug] [--info]
+                              {show_macs,set_mac_filter}
+
+EFG WiFi automation: manage Unifi Cloud Key mac address filter
+
+positional arguments:
+  {show_macs,set_mac_filter}
+                        the command to execute
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --wifi_name WIFI_NAME
+                        the Cloud Key WiFi name (SSID) to work on
+  --macfile MACFILE     the name of the file with mac addresses (not required
+                        for the 'show_macs' command)
+  --configfile CONFIGFILE
+                        our configfile (default is efg_automation.ini)
+  --debug               print debug output
+  --info                print info output
 ----
 
 [NOTE]
 ====
 * the `show_macs` command shows the MAC addresses set in the WiFi filter of the SSID in question
 * thus use the `show_macs` command for CloudKey connectivity testing
-* the `set_mac_filter` command sets (= completely overwrites) the MAC address filter of the SSID in question
-from the file specified in the `--macfile` parameter (for the file layout refer to <<_initial_mac_filter_setup_via_a_mac_address_file>>)
+* the `set_mac_filter` command sets (= completely overwrites) the MAC address filter of the SSID specified by the `--wifi_name` parameter from the file specified in the `--macfile` parameter
+* each MAC address entry in the MAC file is associated with a WiFi name (SSID) - the `set_mac_filter` command will only process entries with a matching WiFi name (SSID) as set by the `--wifi_name` parameter
+* for the MAC file layout refer to <<_initial_mac_filter_setup_via_a_mac_address_file>>)
 ====
 
 ==== Initial MAC Filter Setup via a MAC address file
@@ -315,6 +324,7 @@ The rules for setting up a MAC address file are:
 
 * each MAC address has to be on a separate line in the file
 * the only allowed delimiter between two hex values is a colon `:`
+* then - separated with a semicolon - the Wifi name (SSID) must follow (the `set_mac_filter` command will only process entries with a matching WiFi name (SSID) as set by the `--wifi_name` parameter)
 * line comments are allowed: they must start with a hash `#` in column 1 of a line
 * inline comments following a MAC address are allowed as well:
 ** they must be separated from the MAC address by one or more blanks
@@ -324,8 +334,8 @@ The rules for setting up a MAC address file are:
 An example MAC address file showing these conventions looks like this:
 
     # John Doe
-    aa:bb:cc:dd:ee:ff
-    11:22:33:44:55:66      # Jane Doe
+    aa:bb:cc:dd:ee:ff;my-SSID
+    11:22:33:44:55:66;my-other-SSID      # Jane Doe
 
 
 ==== MAC address file update when processing ADDMAC and DELMAC tasks
@@ -366,19 +376,31 @@ Recommended usage: Run from crontab in the desired frequence.
 General usage from command line:
 
 ----
-usage: efg_automation.py process_wifi_mac_tasks [-h] [--configfile CONFIGFILE]
-                                                [--wifi_name WIFI_NAME]
+usage: efg_automation.py [-h] [--configfile CONFIGFILE] [--macfile MACFILE]
+                         [--debug] [--info]
+                         {process_wifi_mac_tasks}
+
+the EFG Automation CLI
+
+positional arguments:
+  {process_wifi_mac_tasks}
+                        process all open WiFi MAC filter list tasks
 
 optional arguments:
   -h, --help            show this help message and exit
   --configfile CONFIGFILE
                         our configfile (default is efg_automation.ini)
-  --wifi_name WIFI_NAME
-                        the WiFi name (SSID) to work on (optional -- if not
-                        given, the config default is used)
+  --macfile MACFILE     the name of the file where MAC addresses will be
+                        maintained if update_mac_file_on_add_remove is set
+                        active (default is mac_addresses.txt)
+  --debug               print debug output
+  --info                print info output
 ----
 
 Invoking this program will
 
 * read all open *ADDMAC* / *DELMAC* Planner Tasks to add or remove MAC addresses
-* then add or remove the MAC in question to or from the CloudKey WiFi name (SSID) MAC filter
+* then add or remove the MAC in question to or from the CloudKey WiFi name (SSID) MAC filter with the WiFi name that is set in the *ADDMAC* / *DELMAC* planner task
+* if the `update_mac_file_on_add_remove` setting in the config is set, then all ADDMAC / DELMAC changes will be mirrored to that MAC address file (so that the file has the same inventory of MACs than the Cloudkey MAC filters).
+
+WARNING: Manual MAC filter changes applied directly to the CloudKey config via tthe CloudKey GUI will NOT be automatically detected and mirrored back to the MAC address file --> in that case the file and the MAC filter list in the CloudKey will start to diverge!
