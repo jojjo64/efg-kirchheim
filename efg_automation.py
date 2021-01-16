@@ -15,6 +15,24 @@ class EFGAutomation(object):
       the EFG automation class offers a CLI to call and orchestrate all automation tasks
    '''
 
+   def __init__ (self, mstnotifications, configfile='efg_automation.ini', macfile='mac_addresses.txt'):
+      '''
+         object initialization:
+          * store parameters
+          * parse our config
+
+         :param mstnotifications: the already set up MS Teams Notification Environment
+         :param configfile: our config file
+         :param wifi_name: (optional) the WiFi Name (SSID) to work on (else the default from the config is taken)
+      '''
+      logger = logging.getLogger()
+      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
+   
+      self.mstnotifications = mstnotifications
+      self.configfile = configfile
+      self.macfile = macfile
+      self._read_config()
+      
    def _read_config (self):
       '''
          read all required EFG automation parameters
@@ -37,24 +55,6 @@ class EFGAutomation(object):
       self.send_msteams_status_messages = efgautomation_config.getboolean('send_msteams_status_messages')
       self.send_msteams_error_messages = efgautomation_config.getboolean('send_msteams_error_messages')
 
-   def __init__(self, mstnotifications, configfile='efg_automation.ini', wifi_name=None):
-      '''
-         object initialization:
-          * store parameters
-          * parse our config
-          
-         :param mstnotifications: the already set up MS Teams Notification Environment
-         :param configfile: our config file
-         :param wifi_name: (optional) the WiFi Name (SSID) to work on (else the default from the config is taken)
-      '''
-      logger = logging.getLogger()
-      logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
-      
-      self.mstnotifications = mstnotifications
-      self.configfile = configfile
-      self.wifi_name = wifi_name
-      self._read_config()
-      
    def process_wifi_mac_tasks(self):
       '''
          process all open WiFi MAC address management tasks listed in MS Planner
@@ -63,7 +63,7 @@ class EFGAutomation(object):
       logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
       
       self.manage_planner_tasks = ManageEFGWiFiPlannerTasks(self.configfile)
-      self.manage_wifi = Manage_MACFilter('mac_addresses.txt', self.configfile, self.wifi_name)
+      self.manage_wifi = Manage_MACFilter(self.macfile, self.configfile)
       
       # loop thru all open MAC address tasks
       i = 0
@@ -71,12 +71,14 @@ class EFGAutomation(object):
          # either add a new MAC address...
          if task.efg_mac_command == 'addmac':
             self.manage_wifi.add_mac_to_mac_filter(
+               task.efg_wifi_name,
                task._task_details.efg_mac_address,
                task.efg_mac_comment
             )
          # ... or remove a MAC address
          elif task.efg_mac_command == 'delmac':
             self.manage_wifi.remove_mac_from_mac_filter(
+               task.efg_wifi_name,
                task._task_details.efg_mac_address
             )
          else:
@@ -113,12 +115,12 @@ def process_wifi_mac_tasks(args):
       logger.exception(f'caught exception {e} in setting up MSTeamsAutomationNotifications!!!')
    else:
       try:
-         a = EFGAutomation(mstnotifications, configfile=args.configfile, wifi_name=args.wifi_name)
+         a = EFGAutomation(mstnotifications, configfile=args.configfile, macfile=args.macfile)
          a.process_wifi_mac_tasks()
       # in case of an exception: raise an alert. Here we could as well send a mail or whatever alerting we prefer...
       except Exception as e:
          errmsg = f'Caught exception "{e}" in EFGAutomation-->process_wifi_mac_tasks!'
-         logger.critical(errmsg)
+         logger.exception(errmsg)
          mstnotifications.send_error_message(errmsg)
       else:
          logger.info('EFGAutomation process_wifi_mac_tasks ends without error')
@@ -130,32 +132,48 @@ if __name__ == "__main__":
    '''
       the EFG Automation CLI
    '''
-   logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
-   logger = logging.getLogger()
    
    # process arguments
    parser = argparse.ArgumentParser(description='the EFG Automation CLI')
-
-   # introduce a subparser in case we get more commands in the future (never say never :-)
-   subparsers = parser.add_subparsers(dest='command')
    
    # the WiFi automation commands
-   wifimacparser = subparsers.add_parser('process_wifi_mac_tasks', help='process all open WiFi MAC filter list tasks')
-   # the config file
-   wifimacparser.add_argument("--configfile",
+   parser.add_argument("command", choices=('process_wifi_mac_tasks',), help='process all open WiFi MAC filter list tasks')
+   parser.add_argument("--configfile",
                               help="our configfile (default is efg_automation.ini)",
                               default='efg_automation.ini'
    )
-   wifimacparser.add_argument("--wifi_name",
-                              help="the WiFi name (SSID) to work on (optional -- if not given, the config default is used)",
-                              default=None
-   )
+   parser.add_argument("--macfile",
+                       help="the name of the file where MAC addresses will be maintained if update_mac_file_on_add_remove is set active (default is mac_addresses.txt)",
+                       default='mac_addresses.txt'
+                       )
+   parser.add_argument("--debug",
+                       help="print debug output",
+                       default=False,
+                       action='store_true',
+                       )
+   parser.add_argument("--info",
+                       help="print info output",
+                       default=False,
+                       action='store_true',
+                       )
    args = parser.parse_args(sys.argv[1:])
+   
+   # depending on parameters set either debug or info output or log to file
+   if args.debug:
+      logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   elif args.info:
+      logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   else:
+      logging.basicConfig(filename='/var/log/efg_automation.log', level=logging.DEBUG,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   logger = logging.getLogger()
 
    # WiFi automation tasks
    if args.command == 'process_wifi_mac_tasks':
       process_wifi_mac_tasks(args)
    else:
-      errmsg = f'unknown command "{args.command}"!!!'
+      errmsg = f'unknown command "{args.command}" -- use -h for help!!!'
       logger.critical(errmsg)
       raise ValueError(errmsg)

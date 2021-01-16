@@ -136,8 +136,9 @@ class EFGTask(ApiComponent):
       '''
          extract the EFG Details from the task title
       '''
-      self.efg_mac_command = self.title.split('-')[0].strip().lower()
-      self.efg_mac_comment = self.title.split('-')[1].strip()
+      self.efg_mac_command = self.title.split(' - ')[0].strip().lower()
+      self.efg_mac_comment = self.title.split(' - ')[1].strip()
+      self.efg_wifi_name = self.title.split(' - ')[2].strip()
 
    #
    def update_task_percent_complete (self):
@@ -430,9 +431,6 @@ if __name__ == "__main__":
    '''
       the EFG O365 Planner Tasks CLI
    '''
-   logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
-   logger = logging.getLogger()
-   
    # process arguments
    parser = argparse.ArgumentParser(description='EFG O365 Planner Task automation: manage Planner Tasks')
    parser.add_argument("command",
@@ -448,8 +446,26 @@ if __name__ == "__main__":
                        default=False,
                        action='store_true',
                        )
+   parser.add_argument("--debug",
+                       help="print debug output",
+                       default=False,
+                       action='store_true',
+                       )
+   parser.add_argument("--info",
+                       help="print info output",
+                       default=False,
+                       action='store_true',
+                       )
    args = parser.parse_args(sys.argv[1:])
-   
+
+   # depending on parameters set either debug or info output
+   if args.debug:
+      logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+   elif args.info:
+      logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                          format='%(name)s.%(lineno)s[%(levelname)s]: %(message)s')
+
    # add optional arguments to kwargs
    kwargs = {}
    if args.do_initial_auth:
@@ -464,4 +480,4 @@ if __name__ == "__main__":
       print('==============================================')
       for task in o365manageobj.get_all_open_EFGWiFiAutomation_planner_tasks():
          print(f'   id "{task.id}" title "{task.title}" description "{task._task_details.description}"')
-         print(f'   command "{task.efg_mac_command}" comment "{task.efg_mac_comment}" flow_id "{task._task_details.efg_flow_number}" MAC "{task._task_details.efg_mac_address}"')
+         print(f'   command "{task.efg_mac_command}" comment "{task.efg_mac_comment}" wifi "{task.efg_wifi_name}" flow_id "{task._task_details.efg_flow_number}" MAC "{task._task_details.efg_mac_address}"')
