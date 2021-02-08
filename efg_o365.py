@@ -136,9 +136,9 @@ class EFGTask(ApiComponent):
       '''
          extract the EFG Details from the task title
       '''
-      self.efg_mac_command = self.title.split(' - ')[0].strip().lower()
-      self.efg_mac_comment = self.title.split(' - ')[1].strip()
-      self.efg_wifi_name = self.title.split(' - ')[2].strip()
+      self.efg_mac_command = self.title.split('#')[0].strip().lower()
+      self.efg_mac_comment = self.title.split('#')[1].strip()
+      self.efg_wifi_name = self.title.split('#')[2].strip()
 
    #
    def update_task_percent_complete (self):
