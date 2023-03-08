@@ -3,3 +3,8 @@
 **/o365_token.txt
 /docs/efg_automation.pdf
 /jbrauer.mac_addresses.txt
+__pycache__/**
+.idea/
+.DS_Store
+venv/
+mac_addresses.txt
