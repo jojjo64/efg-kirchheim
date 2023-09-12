@@ -297,7 +297,7 @@ class EFGMACFile(object):
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
       
       if wifi_name in self.mac_address_list.keys():
-         if mac_address.lower() not in self.mac_address_list[wifi_name]:
+         if mac_address.lower() in self.mac_address_list[wifi_name]:
             self.mac_address_list[wifi_name].remove(mac_address.lower())
       if wifi_name in self.mac_address_list_extended.keys():
          if mac_address.lower() in self.mac_address_list_extended[wifi_name].keys():
