@@ -8,26 +8,24 @@ from pathlib import Path
 from pyunifi.controller import Controller as pyunifi_Controller
 
 
-
-
 class pyunifi_WiFi_Controller(pyunifi_Controller):
    '''
       An extension to pyunifi: add methods required for Unifi Cloud Key automation at the EFG Kirchheim.
       Extensions are:
-      
+
        * added methods to change WiFi configuration settings
    '''
-   
+
    #
    def _get_wifi_settings (self, wifi_id):
       '''
          get the config settings for a particular WiFi (WLAN)
-      
+
          :param wifi_id: the id of the WLAN to get the settings for
          :return: all settings for the WLAN given by id
       '''
       return self._api_read(f'rest/wlanconf/{wifi_id}')
-   
+
    #
    def get_current_mac_filter_list (self, wifi_name):
       '''
@@ -35,25 +33,25 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
          for whathever reason the REST API endpoint that gets called via _get_wifi_settings() returns a list
          of results, so we blindly take the 0th (first) element in the list and return the mac_filter_list list
          FIX: convert the MACs to all lowercase for comparisons during a remove MAC operation
-      
+
          :param wifi_name: the name of the WLAN to get the MAC address list for
          :return: the MAC address list for the WLAN given by id
       '''
       wifi_id = self.get_wifi_id_by_name(wifi_name)
       return list(map(lambda x: x.lower() if type(x) is str else x,
                       self._get_wifi_settings(wifi_id)[0]['mac_filter_list']))
-   
+
    #
    def _update_wifi_settings (self, wifi_id, params):
       '''
          general interface to update WiFi settings
-         
+
          :param wifi_id: the id of the WLAN to update the settings for
          :param params: params must hold a dict of valid wifi config key/value pairs
          :return:
       '''
       self._api_update(f'rest/wlanconf/{wifi_id}', params=params)
-   
+
    #
    def get_wifi_id_by_name (self, name):
       """ get the internal wifi ID by searching for the WiFi name in the WiFi config"""
@@ -83,18 +81,18 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
          ValueError :exception
       '''
       assert type(mac_address_list) in (tuple, list), 'parameter error: mac_address_list must be tuple or list!'
-      
+
       for i, m in enumerate(mac_address_list):
          # regex from https://stackoverflow.com/questions/7629643/how-do-i-validate-the-format-of-a-mac-address
          # however removed dash as a separator -- we only accept colons as a separator...
          if not re.match("[0-9a-f]{2}([:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", m.lower()):
             raise ValueError(f'MAC address at list index {i}: invalid MAC address "{m}"!')
-   
+
    #
    def set_wifi_mac_filter_list (self, wifi_name, mac_address_list):
       '''
          set (overwrite) the wifi MAC address filter
-      
+
          :param wifi_name: the name of the WLAN to get the MAC address list for
          :param mac_address_list: the list of MACs to set the filter to
       '''
@@ -102,12 +100,12 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       wifi_id = self.get_wifi_id_by_name(wifi_name)
       self._validate_mac_filter_list(mac_address_list)
       self._update_wifi_settings(wifi_id, params={'mac_filter_list': mac_address_list})
-   
+
    #
    def add_mac_to_mac_filter (self, wifi_name, mac_address):
       '''
          add a MAC address to the current MAC filter list
-         
+
          :param wifi_name: the name of the WLAN to get the MAC address list for
          :param mac_address: the MAC address to add
       '''
@@ -124,7 +122,7 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       else:
          logger.warning(f'MAC address {mac_address.lower()} already contained in MAC list -- no action taken...')
          # ToDo: add exception
-   
+
    #
    def remove_mac_from_mac_filter (self, wifi_name, mac_address):
       '''
@@ -136,7 +134,7 @@ class pyunifi_WiFi_Controller(pyunifi_Controller):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       # get the current list of MACs in the MAC address filter
       # if the MAC to remove is contained, remove it and update the entire list
       mac_address_list = self.get_current_mac_filter_list(wifi_name)
@@ -156,21 +154,21 @@ class EFGFCloudKeyConfig(object):
       simple class to process our configuration file
       we use the python builtin configparser for processing an INI file with key/value pairs grouped in sections
    '''
-   
+
    def __init__(self, configfile=None):
       ''' process config file, pull out our vars '''
       logger = logging.getLogger()
       logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
-      
+
       # check if config file exists, else raise an exception
       f = Path(configfile)
       if not f.is_file():
          raise ValueError(f'configfile "{configfile}" not found!')
-      
+
       # set up the config parser and read in our config file
       config = configparser.ConfigParser()
       config.read(configfile)
-      
+
       # check for existence of keys we need
       # NOTE: all these stmts will throw a KeyError exception if either the section or one of the keys does not exist
       cloudkey_config = config['CloudKey']
@@ -179,6 +177,22 @@ class EFGFCloudKeyConfig(object):
       self.cloudkey_password = cloudkey_config['password']
       self.cloudkey_update_mac_file_on_add_remove = cloudkey_config.getboolean('update_mac_file_on_add_remove')
 
+      # first test that the new CloudKey key Unifi_Controller_Type is present
+      # if not: boldly assume we will run against a classic Unifi CloudKey
+      try:
+         assert cloudkey_config['Unifi_Controller_Type'] is not None
+      except AssertionError:
+         self.cloudkey_version = "v5"
+      else:
+         # 2023-09-25: set the version to send to pyunifi v1.21:
+         #  * if cloudkey_config['Unifi_Controller_Type'] is "CloudKey": set to v5
+         #  * if cloudkey_config['Unifi_Controller_Type'] is "DreamMachine": set to UDMP-unifiOS
+         if cloudkey_config['Unifi_Controller_Type'] == "CloudKey":
+            self.cloudkey_version = "v5"
+         elif cloudkey_config['Unifi_Controller_Type'] == "DreamMachine":
+            self.cloudkey_version = "UDMP-unifiOS"
+         else:
+            raise ValueError(f'Unifi_Controller_Type "{cloudkey_config["Unifi_Controller_Type"]}" is invalid!')
 
 
 
@@ -188,13 +202,13 @@ class EFGMACFile(object):
    '''
       simple class to process the MAC address file
       the class has
-      
+
        * a list with the mac addresses (self.mac_address_list)
        * a dict with mac addresses and comments (self.mac_address_list_extended)
-       
+
       the dict will be used when the list of MACs is written back to the mac address file
       the idea behind maintaining a file is:
-      
+
        * in case of a fatal event in the Cloud Key (e.g. memory error) the entire list of MACs is lost
          (ok you should have a daily backup of the entire config -- in that case you are okay and don t need
          the restore function offered here)
@@ -205,7 +219,7 @@ class EFGMACFile(object):
       ''' NOTE: no MAC address validation done, only file processing '''
       logger = logging.getLogger()
       logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
-   
+
       self.macfile = macfile
       self.mac_address_list = {}
       self.mac_address_list_extended = {}
@@ -216,7 +230,7 @@ class EFGMACFile(object):
       # check if macfile exists, else raise an exception
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       f = Path(self.macfile)
       if not f.is_file():
          raise ValueError(f'macfile "{self.macfile}" not found!')
@@ -241,7 +255,7 @@ class EFGMACFile(object):
             if wifi_name not in self.mac_address_list_extended:
                self.mac_address_list_extended[wifi_name] = {}
             self.mac_address_list_extended[wifi_name][mac_address] = comment
-   
+
    def write_macfile (self):
       '''
          write the MAC address file with both mac addresses and comments back to disk
@@ -270,7 +284,7 @@ class EFGMACFile(object):
    def get_mac_list_for_wifi_name(self, wifi_name):
       ''' return the mac address list for the WiFi name (SSID) '''
       return self.mac_address_list[wifi_name]
-   
+
    def add_mac (self, mac_address, wifi_name, comment):
       '''
          add a MAC to both the simple list and the extended dict and update file
@@ -278,7 +292,7 @@ class EFGMACFile(object):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       if wifi_name not in self.mac_address_list.keys():
          self.mac_address_list[wifi_name] = []
       if mac_address.lower() not in self.mac_address_list[wifi_name]:
@@ -287,7 +301,7 @@ class EFGMACFile(object):
          self.mac_address_list_extended[wifi_name] = {}
       self.mac_address_list_extended[wifi_name][mac_address.lower()] = comment
       self.write_macfile()
-   
+
    def remove_mac (self, mac_address, wifi_name):
       '''
          remove a MAC from both the simple list and the extended dict and update file
@@ -295,7 +309,7 @@ class EFGMACFile(object):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       if wifi_name in self.mac_address_list.keys():
          if mac_address.lower() in self.mac_address_list[wifi_name]:
             self.mac_address_list[wifi_name].remove(mac_address.lower())
@@ -312,24 +326,24 @@ class Manage_MACFilter(object):
       the class to manage the CloudKey MAC Filter
       it manages (orchestrates) the methods of the classes above
    '''
-   
+
    def __init__ (self, macfile, configfile, wifi_name = None):
       '''
          store all parameters
          initialize the config and MAC address objects
          connect to the CloudKey and get the id of the WiFi given by name
-      
+
          :param macfile: the file with the MAC addresses
          :param wifi_name: the WiFi name / SSID to update
          :param configfile: our configuration file (holding data how to access the Cloud Key)
       '''
       logger = logging.getLogger()
       logger.debug(f'{sys._getframe().f_code.co_name}/{self.__class__.__name__} starts...')
-      
+
       self.macfile = macfile
       self.configfile = configfile
       self.wifi_name = wifi_name
-      
+
       # read in our config
       self.config = EFGFCloudKeyConfig(configfile=configfile)
       # read in the MAC address file
@@ -352,25 +366,25 @@ class Manage_MACFilter(object):
       result = self.cloudkey_connect.get_current_mac_filter_list(self.wifi_name)
       logger.debug(f'result: {result}')
       return result
-   
+
    #
    def add_mac_to_mac_filter (self, wifi_name, mac_address, comment):
       '''
          add a MAC to a MAC filter
          add the MAC as well to the contents of the MAC address backup file
-      
+
          :param wifi_name: the WiFi name (SSID) to work on
          :param mac_address: the MAC address to add
          :param comment: a comment for the MAC (usually the owner name)
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       # add the new MAC to both the CloudKey and (if configured) the backup MAC address file
       self.cloudkey_connect.add_mac_to_mac_filter(wifi_name, mac_address)
       if self.config.cloudkey_update_mac_file_on_add_remove:
          self.mac_object.add_mac(mac_address, wifi_name, comment)
-   
+
    #
    def remove_mac_from_mac_filter (self, wifi_name, mac_address):
       '''
@@ -382,12 +396,12 @@ class Manage_MACFilter(object):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       # remove the MAC to both the CloudKey and (if configured) the backup MAC address file
       self.cloudkey_connect.remove_mac_from_mac_filter(wifi_name, mac_address)
       if self.config.cloudkey_update_mac_file_on_add_remove:
          self.mac_object.remove_mac(mac_address, wifi_name)
-   
+
    #
    def set_wifi_mac_filter_from_file (self):
       '''
@@ -396,7 +410,7 @@ class Manage_MACFilter(object):
       '''
       logger = logging.getLogger()
       logger.debug(sys._getframe().f_code.co_name + ' starts...')
-      
+
       # ...and finally apply the new MAC address list
       self.cloudkey_connect.set_wifi_mac_filter_list(self.wifi_name, self.mac_object.get_mac_list_for_wifi_name(self.wifi_name))
       logger.info(
@@ -409,7 +423,7 @@ if __name__ == "__main__":
    '''
       the EFG Wifi Automation CLI
    '''
-   
+
    # process arguments
    parser = argparse.ArgumentParser(description='EFG WiFi automation: manage Unifi Cloud Key mac address filter')
    parser.add_argument("command",
@@ -438,7 +452,7 @@ if __name__ == "__main__":
                        action='store_true',
                        )
    args = parser.parse_args(sys.argv[1:])
-   
+
    # depending on parameters set either debug or info output
    if args.debug:
       logging.basicConfig(stream=sys.stdout, level=logging.DEBUG,
