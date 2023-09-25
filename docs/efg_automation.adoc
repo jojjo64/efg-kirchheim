@@ -30,7 +30,7 @@ gets either added or deleted to the Unifi Cloud Key MAC filter list of the WiFi 
 
 == Technical Overview
 === EFG Automation Parts
-The EFG Automation python script suite comprises of these parts:
+The EFG Automation python script suite comprises these parts:
 
 image::EFGAutomation.overview.png[Overview]
 
@@ -200,10 +200,12 @@ The CloudKey section contains these settings:
     host = <ip>
     user = <user>
     password = <password>
+    Unifi_Controller_Type = [CloudKey|DreamMachine]
     update_mac_file_on_add_remove = yes
 
 * set the `host` var to the cloud key IP
 * set user and password of a CloudKey user with administrative rights into the `user` and `password` vars
+* set the Unifi_Controller_Type to either `CloudKey` or `DreamMachine` (depending on what your Controller is)
 
 ==== O365_Planner Section
 The O365_Planner section contains these settings:
